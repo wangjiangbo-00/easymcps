@@ -1,0 +1,1 @@
+基于openmanus快速集成mcp场景

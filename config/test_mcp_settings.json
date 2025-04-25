@@ -1,0 +1,49 @@
+{
+  "mcpServers": {
+    "get_time_mcp": {
+      "disabled": false,
+      "timeout": 60,
+      "command": "C:\\ProgramData\\anaconda3\\envs\\ai\\python.exe",
+      "args": [
+        "D:\\AI\\project\\OpenManus\\get_time_mcp.py"
+      ]
+    },
+    "amap-maps": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "D:\\AI\\project\\OpenManus\\app\\node_app\\@amap\\amap-maps-mcp-server\\build\\index.js"
+      ],
+      "env": {
+        "AMAP_MAPS_API_KEY": "YOUR_API_KEY"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "sqlite": {
+      "command": "C:\\ProgramData\\anaconda3\\envs\\ai\\python.exe",
+      "args": [
+        "D:\\AI\\project\\servers\\src\\sqlite\\src\\mcp_server_sqlite\\server.py"
+      ],
+      "env": {
+        "--db-path": "D:\\AI\\sqlite\\test.db"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "mysql": {
+      "command": "C:\\ProgramData\\anaconda3\\envs\\ai\\python.exe",
+      "args": [
+        "D:\\AI\\project\\mcps\\mysql_mcp_server\\src\\mysql_mcp_server\\server.py"
+      ],
+      "env": {
+        "MYSQL_HOST": "localhost",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "root",
+        "MYSQL_PASSWORD": "password",
+        "MYSQL_DATABASE": "mcps"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

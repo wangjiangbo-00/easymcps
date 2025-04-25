@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .scene-tree {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .server-card {
+            margin-bottom: 0.5rem;
+            border: 1px solid #dee2e6;
+        }
+
+        .server-header {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+        }
+
+        .server-body {
+            padding: 0.5rem 1rem;
+            display: none;
+        }
+
+        .server-card.active .server-body {
+            display: block;
+        }
+
+        .server-status-badge {
+            margin-left: 0.5rem;
+        }
+
+        .server-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-left: auto;
+        }
+
+        .server-tabs {
+            margin-top: 0.5rem;
+        }
+
+        .server-tabs .nav-link {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .tab-content {
+            padding: 0.5rem 0;
+        }
+
+        .tools-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container-fluid mt-3">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card scene-tree">
+                    <div class="card-header d-flex justify-content-between">
+                        <h5>Scenes</h5>
+                        <button id="add-scene" class="btn btn-sm btn-primary">+ Add</button>
+                    </div>
+                    <div class="card-body">
+                        <ul id="scene-list" class="list-group"></ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-9">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 id="current-scene">Select a scene</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="server-list"></div>
+                        <button id="add-server" class="btn btn-primary mt-3" disabled>+ Add Server</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Server Modal -->
+    <div class="modal fade" id="addServerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add MCP Server</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="server-form">
+                        <div class="mb-3">
+                            <label class="form-label">Server Name</label>
+                            <input type="text" class="form-control" id="server-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Command</label>
+                            <input type="text" class="form-control" id="server-cmd" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Arguments</label>
+                            <input type="text" class="form-control" id="server-args">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Environment Variables</label>
+                            <textarea class="form-control" id="server-env" rows="3"></textarea>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="server-enabled" checked>
+                            <label class="form-check-label">Enabled</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="save-server">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentSceneId = null;
+        const addServerModal = new bootstrap.Modal('#addServerModal');
+
+        // Load scenes
+        async function loadScenes() {
+            const response = await fetch('/get-user-scenes');
+            const data = await response.json();
+            const sceneList = document.getElementById('scene-list');
+            sceneList.innerHTML = '';
+
+            data.scenes.forEach(scene => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.dataset.id = scene.id;
+                li.innerHTML = `
+                    ${scene.name}
+                    <span class="badge bg-success">Active</span>
+                `;
+                sceneList.appendChild(li);
+                // Auto-load first scene
+                if (!currentSceneId) {
+                    loadScene(scene.id, scene.name);
+                }
+            });
+        }
+
+        // Load servers for selected scene
+        async function loadScene(sceneId, sceneName) {
+            currentSceneId = sceneId;
+            document.getElementById('current-scene').textContent = sceneName;
+            document.getElementById('add-server').disabled = false;
+
+            const response = await fetch(`/get-mcp-config?scene_id=${sceneId}`);
+            const data = await response.json();
+            const serverList = document.getElementById('server-list');
+            serverList.innerHTML = '';
+
+            data.configs.forEach(config => {
+                const card = document.createElement('div');
+                card.className = 'card server-card';
+                card.innerHTML = `
+                    <div class="server-header d-flex align-items-center" onclick="this.parentElement.classList.toggle('active')">
+                        <h6 class="mb-0">${config.server_name}</h6>
+                        <span class="server-status-badge badge ${config.config.disabled ? 'bg-secondary' : 'bg-success'}">
+                            ${config.config.disabled ? 'Disabled' : 'Enabled'}
+                        </span>
+                        <div class="server-actions">
+                            <button class="btn btn-sm btn-danger delete-server">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                    <div class="server-body">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox"
+                                   ${config.config.disabled ? '' : 'checked'}
+                                   data-server="${config.server_name}">
+                            <label class="form-check-label">Enabled</label>
+                        </div>
+                        <div class="server-tabs">
+                            <ul class="nav nav-tabs">
+                                <li class="nav-item">
+                                    <a class="nav-link active" data-bs-toggle="tab"
+                                       href="#tools-tab-${config.server_name}">Tools</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" data-bs-toggle="tab"
+                                       href="#config-tab-${config.server_name}">Configuration</a>
+                                </li>
+                            </ul>
+                            <div class="tab-content">
+                                <div class="tab-pane fade show active" id="tools-tab-${config.server_name}">
+                                    <button class="btn btn-sm btn-info refresh-server mt-2"
+                                            data-server="${config.server_name}">
+                                        Refresh Tools
+                                    </button>
+                                    <div class="tools-list mt-2">
+                                        <ul id="tools-${config.server_name}" class="list-group">
+                                            <!-- Tools will be populated here -->
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="tab-pane fade" id="config-tab-${config.server_name}">
+                                    <div class="config-form mt-2">
+                            <div class="mb-2">
+                                <label class="form-label small">Command</label>
+                                <input type="text" class="form-control form-control-sm"
+                                       value="${config.config.cmd || ''}"
+                                       data-field="cmd" data-server="${config.server_name}">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">Arguments (JSON array)</label>
+                                <textarea class="form-control form-control-sm"
+                                       data-field="args" data-server="${config.server_name}"
+                                       rows="2">${JSON.stringify(config.config.args || [], null, 2)}</textarea>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">Environment</label>
+                                <textarea class="form-control form-control-sm"
+                                       data-field="env" data-server="${config.server_name}"
+                                       rows="2">${config.config.env || ''}</textarea>
+                            </div>
+                            <div class="d-flex justify-content-end mt-2">
+                                <button class="btn btn-sm btn-primary save-server"
+                                        data-server="${config.server_name}">
+                                    Save
+                                </button>
+                            </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                `;
+                serverList.appendChild(card);
+
+                // Auto-load tools for enabled servers
+                if (!config.config.disabled) {
+                    const toolsList = document.getElementById(`tools-${config.server_name}`);
+                    toolsList.innerHTML = '<li class="list-group-item">Loading tools...</li>';
+
+                    fetch(`/start-mcp-server?server_name=${config.server_name}`)
+                        .then(startResponse => startResponse.json())
+                        .then(startResult => {
+                            if (startResult.success) {
+                                return fetch(`/get-mcp-server-tools?server_name=${config.server_name}`);
+                            }
+                            throw new Error('Failed to start server');
+                        })
+                        .then(toolsResponse => toolsResponse.json())
+                        .then(toolsData => {
+                            toolsList.innerHTML = '';
+                            if (toolsData.tools && toolsData.tools.length > 0) {
+                                toolsData.tools.forEach(tool => {
+                                    const li = document.createElement('li');
+                                    li.className = 'list-group-item';
+                                    li.innerHTML = `
+                                        <strong>${tool.name}</strong><br>
+                                        <small>${tool.description || 'No description available'}</small>
+                                    `;
+                                    toolsList.appendChild(li);
+                                });
+                            } else {
+                                toolsList.innerHTML = '<li class="list-group-item">No tools found</li>';
+                            }
+                        })
+                        .catch(error => {
+                            toolsList.innerHTML = '<li class="list-group-item text-danger">Error loading tools</li>';
+                            console.error('Error loading tools:', error);
+                        });
+                }
+            });
+        }
+
+        // Save server config
+        async function saveServerConfig(serverName, config) {
+            const response = await fetch('/save-mcp-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    scene_id: currentSceneId,
+                    server_name: serverName,
+                    config: config
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                console.error('Failed to save config:', error);
+                alert(`Failed to save config: ${error.error || 'Unknown error'}`);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Load user's scenes on page load
+            await loadScenes();
+
+            // Add new scene
+            document.getElementById('add-scene').addEventListener('click', async () => {
+                const sceneName = prompt('Enter scene name:');
+                if (sceneName) {
+                    const response = await fetch('/add-scene', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `name=${encodeURIComponent(sceneName)}`
+                    });
+                    if (response.ok) {
+                        await loadScenes();
+                    }
+                }
+            });
+
+            // Load scene when clicked
+            document.getElementById('scene-list').addEventListener('click', (e) => {
+                if (e.target.tagName === 'LI') {
+                    const sceneId = e.target.dataset.id;
+                    const sceneName = e.target.textContent.trim();
+                    loadScene(sceneId, sceneName);
+                }
+            });
+
+            // Add new server
+            document.getElementById('add-server').addEventListener('click', () => {
+                addServerModal.show();
+            });
+
+            // Save new server
+            document.getElementById('save-server').addEventListener('click', async () => {
+                const serverName = document.getElementById('server-name').value;
+                const serverCmd = document.getElementById('server-cmd').value;
+                const serverArgs = document.getElementById('server-args').value;
+                const serverEnv = document.getElementById('server-env').value;
+                const enabled = document.getElementById('server-enabled').checked;
+
+                if (serverName && serverCmd && currentSceneId) {
+                    await saveServerConfig(serverName, {
+                        disabled: !enabled,
+                        cmd: serverCmd,
+                        args: serverArgs,
+                        env: serverEnv,
+                        running: false
+                    });
+                    addServerModal.hide();
+                    loadScene(currentSceneId, document.getElementById('current-scene').textContent);
+                }
+            });
+
+            // Delete server
+            document.addEventListener('click', async (e) => {
+                if (e.target.classList.contains('delete-server')) {
+                    const card = e.target.closest('.server-card');
+                    const serverName = card.querySelector('input[type="checkbox"]').dataset.server;
+
+                    if (confirm(`Delete server ${serverName}?`)) {
+                        await fetch('/delete-mcp-config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                scene_id: currentSceneId,
+                                server_name: serverName
+                            })
+                        });
+                        loadScene(currentSceneId, document.getElementById('current-scene').textContent);
+                    }
+                }
+            });
+
+            // Save config changes
+            document.addEventListener('change', async (e) => {
+                if (e.target.matches('input[type="checkbox"], input[type="text"], textarea') && currentSceneId) {
+                    const serverName = e.target.dataset.server;
+                    const card = e.target.closest('.server-card');
+                    const config = {
+                        disabled: !card.querySelector('input[type="checkbox"]').checked,
+                        cmd: card.querySelector('input[data-field="cmd"]').value,
+                        args: card.querySelector('input[data-field="args"]').value,
+                        env: card.querySelector('textarea[data-field="env"]').value,
+                        running: card.querySelector('.badge').textContent.trim() === 'Running'
+                    };
+                    await saveServerConfig(serverName, config);
+                }
+            });
+
+            // Handle server actions
+            document.addEventListener('click', async (e) => {
+                if (e.target.classList.contains('refresh-server')) {
+                    const serverName = e.target.dataset.server;
+                    const toolsList = document.getElementById(`tools-${serverName}`);
+                    toolsList.innerHTML = '<li class="list-group-item">Loading tools...</li>';
+
+                    try {
+                        // Start server and get tools
+                        const startResponse = await fetch(`/start-mcp-server?server_name=${encodeURIComponent(serverName)}`, {
+                            credentials: 'same-origin',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        if (!startResponse.ok) {
+                            const error = await startResponse.json();
+                            throw new Error(error.error || 'Failed to start server');
+                        }
+
+                        const startResult = await startResponse.json();
+
+                        // Get tools list
+                        const toolsResponse = await fetch(`/get-mcp-server-tools?server_name=${encodeURIComponent(serverName)}`);
+                        if (!toolsResponse.ok) {
+                            throw new Error('Failed to get tools list');
+                        }
+
+                        const toolsData = await toolsResponse.json();
+                        toolsList.innerHTML = '';
+
+                        if (toolsData.tools && toolsData.tools.length > 0) {
+                            toolsData.tools.forEach(tool => {
+                                const li = document.createElement('li');
+                                li.className = 'list-group-item';
+                                li.innerHTML = `
+                                    <strong>${tool.name}</strong><br>
+                                    <small>${tool.description || 'No description available'}</small>
+                                `;
+                                toolsList.appendChild(li);
+                            });
+                        } else {
+                            toolsList.innerHTML = '<li class="list-group-item">No tools found</li>';
+                        }
+                    } catch (error) {
+                        toolsList.innerHTML = `<li class="list-group-item text-danger">${error.message || 'Error loading tools'}</li>`;
+                        console.error('Error refreshing tools:', error);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
